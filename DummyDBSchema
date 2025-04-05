@@ -1,0 +1,150 @@
+-- Create the database first (run this as postgres user)
+CREATE DATABASE chatbot_semantic_db;
+
+-- Connect to the database
+\c chatbot_semantic_db
+
+-- Enable the pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- 1. Create regular data tables (no vectors)
+CREATE TABLE customers (
+  customer_id SERIAL PRIMARY KEY,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  email VARCHAR(255) UNIQUE,
+  phone VARCHAR(20),
+  address TEXT,
+  join_date DATE
+);
+
+CREATE TABLE products (
+  product_id SERIAL PRIMARY KEY,
+  product_name VARCHAR(200),
+  category VARCHAR(100),
+  price DECIMAL(10,2),
+  stock_quantity INTEGER,
+  description TEXT
+);
+
+CREATE TABLE orders (
+  order_id SERIAL PRIMARY KEY,
+  customer_id INTEGER REFERENCES customers(customer_id),
+  order_date TIMESTAMP,
+  status VARCHAR(50),
+  total_amount DECIMAL(12,2)
+);
+
+CREATE TABLE order_items (
+  item_id SERIAL PRIMARY KEY,
+  order_id INTEGER REFERENCES orders(order_id),
+  product_id INTEGER REFERENCES products(product_id),
+  quantity INTEGER,
+  price_per_unit DECIMAL(10,2)
+);
+
+-- 2. Create metadata tables with vector support
+-- Table metadata contains information about each table
+CREATE TABLE table_metadata (
+  table_id SERIAL PRIMARY KEY,
+  table_name VARCHAR(100) UNIQUE NOT NULL,
+  description TEXT,
+  primary_key_column VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  embedding vector(1536) -- For storing semantic embeddings
+);
+
+-- Column metadata contains information about each column
+CREATE TABLE column_metadata (
+  column_id SERIAL PRIMARY KEY,
+  table_name VARCHAR(100) NOT NULL,
+  column_name VARCHAR(100) NOT NULL,
+  data_type VARCHAR(50) NOT NULL,
+  description TEXT,
+  is_primary_key BOOLEAN DEFAULT FALSE,
+  is_foreign_key BOOLEAN DEFAULT FALSE,
+  references_table VARCHAR(100),
+  references_column VARCHAR(100),
+  embedding vector(1536), -- For storing semantic embeddings
+  UNIQUE(table_name, column_name)
+);
+
+-- This table stores semantic relationship information
+CREATE TABLE semantic_relations (
+  relation_id SERIAL PRIMARY KEY,
+  entity_type VARCHAR(20) NOT NULL, -- 'table' or 'column'
+  entity_id INTEGER NOT NULL,
+  related_entity_type VARCHAR(20) NOT NULL, -- 'table' or 'column'
+  related_entity_id INTEGER NOT NULL,
+  relation_type VARCHAR(50) NOT NULL, -- e.g., 'similar_meaning', 'business_related', etc.
+  similarity_score FLOAT,
+  embedding vector(1536) -- For storing relationship embeddings
+);
+
+-- Insert sample data for regular tables
+INSERT INTO customers (first_name, last_name, email, phone, address, join_date)
+VALUES 
+  ('John', 'Smith', 'john.smith@example.com', '555-123-4567', '123 Main St, Anytown, CA 12345', '2023-01-15'),
+  ('Maria', 'Garcia', 'maria.garcia@example.com', '555-987-6543', '456 Oak Ave, Somewhere, NY 54321', '2023-02-22'),
+  ('Robert', 'Johnson', 'robert.j@example.com', '555-222-3333', '789 Pine Rd, Nowhere, TX 67890', '2023-03-10');
+
+INSERT INTO products (product_name, category, price, stock_quantity, description)
+VALUES 
+  ('Laptop Pro X', 'Electronics', 1299.99, 25, 'High-performance laptop with 16GB RAM and 512GB SSD'),
+  ('Coffee Maker Deluxe', 'Kitchen', 89.99, 50, 'Programmable coffee maker with timer and thermal carafe'),
+  ('Ergonomic Office Chair', 'Furniture', 249.99, 15, 'Fully adjustable office chair with lumbar support');
+
+INSERT INTO orders (customer_id, order_date, status, total_amount)
+VALUES 
+  (1, '2023-04-01 10:30:00', 'Completed', 1299.99),
+  (2, '2023-04-15 14:22:00', 'Shipped', 339.98),
+  (3, '2023-04-22 09:15:00', 'Processing', 249.99);
+
+INSERT INTO order_items (order_id, product_id, quantity, price_per_unit)
+VALUES 
+  (1, 1, 1, 1299.99),
+  (2, 2, 1, 89.99),
+  (2, 3, 1, 249.99),
+  (3, 3, 1, 249.99);
+
+-- Insert metadata about tables (these would be vectorized)
+INSERT INTO table_metadata (table_name, description, primary_key_column)
+VALUES 
+  ('customers', 'Contains customer personal information and contact details. Used for customer management and order processing.', 'customer_id'),
+  ('products', 'Stores product catalog information including inventory and pricing details.', 'product_id'),
+  ('orders', 'Records customer orders with status and total amount information.', 'order_id'),
+  ('order_items', 'Contains line items for each order with product quantities and pricing.', 'item_id');
+
+-- Insert metadata about columns (these would be vectorized)
+INSERT INTO column_metadata (table_name, column_name, data_type, description, is_primary_key, is_foreign_key, references_table, references_column)
+VALUES 
+  -- Customers table columns
+  ('customers', 'customer_id', 'SERIAL', 'Unique identifier for each customer.', TRUE, FALSE, NULL, NULL),
+  ('customers', 'first_name', 'VARCHAR', 'Customer first name.', FALSE, FALSE, NULL, NULL),
+  ('customers', 'last_name', 'VARCHAR', 'Customer last name or surname.', FALSE, FALSE, NULL, NULL),
+  ('customers', 'email', 'VARCHAR', 'Primary contact email address for the customer, used for communications.', FALSE, FALSE, NULL, NULL),
+  ('customers', 'phone', 'VARCHAR', 'Customer phone number for contact purposes.', FALSE, FALSE, NULL, NULL),
+  ('customers', 'address', 'TEXT', 'Customer physical mailing address for shipping and billing.', FALSE, FALSE, NULL, NULL),
+  ('customers', 'join_date', 'DATE', 'Date when the customer first registered or joined our platform.', FALSE, FALSE, NULL, NULL),
+  
+  -- Products table columns
+  ('products', 'product_id', 'SERIAL', 'Unique identifier for each product in our catalog.', TRUE, FALSE, NULL, NULL),
+  ('products', 'product_name', 'VARCHAR', 'Name or title of the product as displayed to customers.', FALSE, FALSE, NULL, NULL),
+  ('products', 'category', 'VARCHAR', 'Product category for classification and filtering.', FALSE, FALSE, NULL, NULL),
+  ('products', 'price', 'DECIMAL', 'Current selling price of the product in USD.', FALSE, FALSE, NULL, NULL),
+  ('products', 'stock_quantity', 'INTEGER', 'Current available inventory quantity of the product.', FALSE, FALSE, NULL, NULL),
+  ('products', 'description', 'TEXT', 'Detailed product description with features and specifications.', FALSE, FALSE, NULL, NULL),
+  
+  -- Orders table columns
+  ('orders', 'order_id', 'SERIAL', 'Unique identifier for each customer order.', TRUE, FALSE, NULL, NULL),
+  ('orders', 'customer_id', 'INTEGER', 'Reference to the customer who placed the order.', FALSE, TRUE, 'customers', 'customer_id'),
+  ('orders', 'order_date', 'TIMESTAMP', 'Date and time when the order was placed.', FALSE, FALSE, NULL, NULL),
+  ('orders', 'status', 'VARCHAR', 'Current status of the order (e.g., Processing, Shipped, Completed).', FALSE, FALSE, NULL, NULL),
+  ('orders', 'total_amount', 'DECIMAL', 'Total monetary amount of the order including all items.', FALSE, FALSE, NULL, NULL),
+  
+  -- Order Items table columns
+  ('order_items', 'item_id', 'SERIAL', 'Unique identifier for each order line item.', TRUE, FALSE, NULL, NULL),
+  ('order_items', 'order_id', 'INTEGER', 'Reference to the parent order.', FALSE, TRUE, 'orders', 'order_id'),
+  ('order_items', 'product_id', 'INTEGER', 'Reference to the product purchased in this line item.', FALSE, TRUE, 'products', 'product_id'),
+  ('order_items', 'quantity', 'INTEGER', 'Number of units of the product purchased in this line item.', FALSE, FALSE, NULL, NULL),
+  ('order_items', 'price_per_unit', 'DECIMAL', 'Price of a single unit at the time of purchase (may differ from current product price).', FALSE, FALSE, NULL, NULL);
