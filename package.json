@@ -1,0 +1,27 @@
+{
+  "name": "semantic-postgres-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for PostgreSQL with semantic understanding",
+  "main": "Index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node Index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "postgresql",
+    "semantic",
+    "ai",
+    "claude"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.18.0",
+    "@modelcontextprotocol/sdk": "^0.4.1",
+    "dotenv": "^16.4.5",
+    "openai": "^3.3.0",
+    "pg": "^8.11.3"
+  }
+}
